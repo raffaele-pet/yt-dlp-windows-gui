@@ -35,7 +35,7 @@ if not exist "%PROJECT_DIR%RUN.vbs" (
     exit /b 1
 )
 
-echo [1/5] Controllo dei requisiti...
+echo [1/6] Controllo dei requisiti...
 call :check_all
 call :print_status
 
@@ -50,16 +50,14 @@ if "%CHECK_ONLY%"=="1" (
     )
 )
 
-if "!ALL_OK!"=="0" (
-    where winget.exe >nul 2>&1
-    if errorlevel 1 (
-        call :fatal "WinGet non e disponibile. Installa App Installer dal Microsoft Store e riprova."
-        exit /b 1
-    )
+where winget.exe >nul 2>&1
+if errorlevel 1 (
+    call :fatal "WinGet non e disponibile. Installa App Installer dal Microsoft Store e riprova."
+    exit /b 1
 )
 
 echo.
-echo [2/5] Installazione dei componenti mancanti...
+echo [2/6] Installazione dei componenti mancanti...
 
 if "!PYTHON_OK!"=="0" (
     call :install_package "Python.Python.3.12" "Python 3.12" "--scope user"
@@ -92,7 +90,24 @@ if "!DENO_OK!"=="0" (
 )
 
 echo.
-echo [3/5] Configurazione dei percorsi...
+echo [3/6] Controllo e installazione degli aggiornamenti...
+call :python_in_use
+if errorlevel 1 (
+    echo [RIMANDA] Python 3.12 e in uso da un altro programma: aggiornamento saltato in sicurezza.
+    echo           Chiudi i programmi Python e riesegui INSTALL.bat per aggiornarlo.
+) else (
+    call :upgrade_if_managed "Python.Python.3.12" "Python 3.12"
+    if errorlevel 1 exit /b 1
+)
+call :update_ytdlp
+if errorlevel 1 exit /b 1
+call :upgrade_if_managed "yt-dlp.FFmpeg" "FFmpeg per yt-dlp"
+if errorlevel 1 exit /b 1
+call :upgrade_if_managed "DenoLand.Deno" "Deno"
+if errorlevel 1 exit /b 1
+
+echo.
+echo [4/6] Configurazione dei percorsi...
 call :ensure_user_path "%LINKS_DIR%"
 if errorlevel 1 (
     call :fatal "Impossibile aggiornare il PATH utente per WinGet."
@@ -106,7 +121,7 @@ if errorlevel 1 (
 echo [OK] PATH utente configurato.
 
 echo.
-echo [4/5] Verifica finale e versioni...
+echo [5/6] Verifica finale e versioni...
 call :check_all
 call :print_status
 
@@ -131,7 +146,7 @@ if not exist "!DENO_COMMAND!" set "DENO_COMMAND=deno"
 echo ---------------------------------------------------------------
 
 echo.
-echo [5/5] Creazione del collegamento sul Desktop...
+echo [6/6] Creazione del collegamento sul Desktop...
 set "YT_DLP_PROJECT=%PROJECT_DIR_NO_SLASH%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
     "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop 'YT-DLP.lnk')); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Avvia l''interfaccia YT-DLP'; $shortcut.IconLocation=(Join-Path $env:WINDIR 'System32\shell32.dll')+',14'; $shortcut.Save()"
@@ -240,6 +255,65 @@ if errorlevel 1 (
 )
 echo [OK] !PACKAGE_NAME! installato o gia aggiornato.
 exit /b 0
+
+
+:upgrade_if_managed
+set "PACKAGE_ID=%~1"
+set "PACKAGE_NAME=%~2"
+winget list --id "!PACKAGE_ID!" --exact --accept-source-agreements --disable-interactivity >nul 2>&1
+if errorlevel 1 (
+    echo [NOTA] !PACKAGE_NAME! non e gestito da WinGet: controllo aggiornamenti saltato.
+    exit /b 0
+)
+
+echo.
+echo ----------------------------------------------------------------
+echo [AGGIORNA] !PACKAGE_NAME!
+echo ----------------------------------------------------------------
+winget upgrade --id "!PACKAGE_ID!" --exact --accept-package-agreements --accept-source-agreements --disable-interactivity --silent
+set "UPDATE_EXIT=!errorlevel!"
+if "!UPDATE_EXIT!"=="0" (
+    echo [OK] !PACKAGE_NAME! aggiornato.
+    exit /b 0
+)
+if "!UPDATE_EXIT!"=="-1978335189" (
+    echo [OK] !PACKAGE_NAME! e gia aggiornato.
+    exit /b 0
+)
+
+echo.
+echo [ERRORE] Controllo o aggiornamento di !PACKAGE_NAME! non riuscito.
+echo Codice restituito: !UPDATE_EXIT!
+echo Premi un tasto per chiudere.
+pause >nul
+exit /b 1
+
+
+:update_ytdlp
+set "YTDLP_COMMAND=%YTDLP_EXE%"
+if not exist "!YTDLP_COMMAND!" set "YTDLP_COMMAND=yt-dlp"
+echo.
+echo ----------------------------------------------------------------
+echo [AGGIORNA] yt-dlp dalla release stabile ufficiale
+echo ----------------------------------------------------------------
+"!YTDLP_COMMAND!" -U
+set "UPDATE_EXIT=!errorlevel!"
+if not "!UPDATE_EXIT!"=="0" (
+    echo.
+    echo [ERRORE] Controllo o aggiornamento di yt-dlp non riuscito.
+    echo Codice restituito: !UPDATE_EXIT!
+    echo Premi un tasto per chiudere.
+    pause >nul
+    exit /b 1
+)
+echo [OK] Controllo aggiornamenti di yt-dlp completato.
+exit /b 0
+
+
+:python_in_use
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$target=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312'))+'\'; $processes=@(Get-Process python,pythonw -ErrorAction SilentlyContinue); foreach($process in $processes){if($process.Path -and ([IO.Path]::GetFullPath($process.Path)).StartsWith($target,[StringComparison]::OrdinalIgnoreCase)){exit 1}}; exit 0"
+exit /b %errorlevel%
 
 
 :ensure_user_path

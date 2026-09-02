@@ -10,6 +10,7 @@ Interfaccia grafica non ufficiale per [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - supporto alle playlist;
 - scelta della cartella di destinazione;
 - barra di avanzamento e annullamento del download;
+- aggiornamento di yt-dlp direttamente dall'interfaccia;
 - verifica del file realmente creato;
 - gestione dei nomi con caratteri accentati;
 - tema scuro ispirato ai colori di yt-dlp.
@@ -34,7 +35,7 @@ Gli altri componenti possono essere installati automaticamente:
 3. Fai doppio clic su `INSTALL.bat`.
 4. Segui l'avanzamento mostrato nel terminale.
 
-L'installer controlla i componenti esistenti, installa solo quelli mancanti, configura il `PATH`, verifica le versioni e crea un collegamento **YT-DLP** sul Desktop.
+L'installer controlla i componenti esistenti, installa quelli mancanti e cerca gli aggiornamenti disponibili. yt-dlp viene confrontato con la release stabile ufficiale; Python, FFmpeg e Deno vengono aggiornati tramite WinGet. Se Python è utilizzato da un altro programma, il suo aggiornamento viene rimandato in sicurezza e l'installer indica come completarlo in seguito. Al termine, configura il `PATH`, verifica le versioni e crea un collegamento **YT-DLP** sul Desktop.
 
 Per eseguire soltanto un controllo, senza installare o modificare nulla:
 
@@ -48,6 +49,8 @@ Fai doppio clic su `RUN.vbs` per aprire l'interfaccia senza mostrare il terminal
 
 Se l'applicazione non parte, utilizza `RUN_DEBUG.cmd` per visualizzare eventuali errori.
 
+Il pulsante **Aggiorna yt-dlp** controlla la release stabile ufficiale, mostra i dettagli dell'operazione nella finestra e installa l'aggiornamento quando necessario.
+
 ## Struttura del progetto
 
 ```text
@@ -57,13 +60,9 @@ RUN.vbs         Avvio normale senza terminale
 RUN_DEBUG.cmd   Avvio diagnostico con terminale
 ```
 
-## Aggiornamento dei componenti
+## Aggiornamenti
 
-```powershell
-winget upgrade --id yt-dlp.yt-dlp
-winget upgrade --id yt-dlp.FFmpeg
-winget upgrade --id DenoLand.Deno
-```
+Esegui nuovamente `INSTALL.bat` per controllare e aggiornare tutti i componenti. Per aggiornare soltanto yt-dlp, usa il pulsante dedicato nell'interfaccia.
 
 ## Note
 

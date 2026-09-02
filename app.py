@@ -126,6 +126,7 @@ class YtDlpApp:
 
         self.messages: queue.Queue[tuple] = queue.Queue()
         self.process: subprocess.Popen[str] | None = None
+        self.active_operation: str | None = None
         self.cancel_requested = False
         self.downloaded_files: list[str] = []
         self.active_destination: Path | None = None
@@ -339,6 +340,13 @@ class YtDlpApp:
             style="Action.TButton",
         )
         self.cancel_button.pack(side="left", padx=(8, 0))
+        self.update_button = ttk.Button(
+            action_row,
+            text="Aggiorna yt-dlp",
+            command=self.start_update,
+            style="Action.TButton",
+        )
+        self.update_button.pack(side="left", padx=(8, 0))
         ttk.Button(
             action_row,
             text="Apri cartella",
@@ -424,9 +432,10 @@ class YtDlpApp:
         self.log.see("end")
         self.log.configure(state="disabled")
 
-    def _set_running(self, running: bool) -> None:
+    def _set_running(self, running: bool, cancellable: bool = True) -> None:
         self.download_button.configure(state="disabled" if running else "normal")
-        self.cancel_button.configure(state="normal" if running else "disabled")
+        self.update_button.configure(state="disabled" if running else "normal")
+        self.cancel_button.configure(state="normal" if running and cancellable else "disabled")
         self.url_entry.configure(state="disabled" if running else "normal")
         self.format_box.configure(state="disabled" if running else "readonly")
 
@@ -479,6 +488,7 @@ class YtDlpApp:
         self.log.configure(state="disabled")
         self._append_log(f"Motore: yt-dlp {yt_dlp_version}")
         self._append_log(f"Destinazione: {destination}")
+        self.active_operation = "download"
         self._set_running(True)
 
         threading.Thread(target=self._download_worker, args=(command,), daemon=True).start()
@@ -518,7 +528,71 @@ class YtDlpApp:
             return_code = self.process.wait()
             self.messages.put(("done", return_code, self.cancel_requested))
         except Exception as exc:  # Keeps GUI errors visible instead of losing them in pythonw.
-            self.messages.put(("error", str(exc)))
+            self.messages.put(("error", "download", str(exc)))
+        finally:
+            self.process = None
+
+    def start_update(self) -> None:
+        if self.process and self.process.poll() is None:
+            return
+
+        executable = locate_yt_dlp()
+        if not executable:
+            messagebox.showerror(
+                APP_NAME,
+                "yt-dlp non è stato trovato. Avvia INSTALL.bat e riprova.",
+            )
+            return
+        try:
+            current_version = probe_yt_dlp(executable)
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            messagebox.showerror(APP_NAME, f"Impossibile verificare yt-dlp:\n{exc}")
+            return
+
+        self.log.configure(state="normal")
+        self.log.delete("1.0", "end")
+        self.log.configure(state="disabled")
+        self.status_var.set("Controllo aggiornamenti...")
+        self.detail_var.set(f"Versione installata: {current_version}")
+        self.progress_var.set(0)
+        self.progress.configure(mode="indeterminate")
+        self.progress.start(12)
+        self._append_log(f"Versione installata: yt-dlp {current_version}")
+        self._append_log("Controllo della release stabile ufficiale...")
+        self.active_operation = "update"
+        self._set_running(True, cancellable=False)
+
+        threading.Thread(
+            target=self._update_worker,
+            args=(executable, current_version),
+            daemon=True,
+        ).start()
+
+    def _update_worker(self, executable: str, previous_version: str) -> None:
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            self.process = subprocess.Popen(
+                [executable, "-U"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding=locale.getpreferredencoding(False),
+                errors="replace",
+                creationflags=creation_flags,
+            )
+            assert self.process.stdout is not None
+            for raw_line in self.process.stdout:
+                line = raw_line.rstrip("\r\n")
+                if line:
+                    self.messages.put(("log", line))
+
+            return_code = self.process.wait()
+            updated_version = previous_version
+            if return_code == 0:
+                updated_version = probe_yt_dlp(executable)
+            self.messages.put(("update_done", return_code, previous_version, updated_version))
+        except Exception as exc:  # Keeps GUI errors visible instead of losing them in pythonw.
+            self.messages.put(("error", "update", str(exc)))
         finally:
             self.process = None
 
@@ -540,18 +614,27 @@ class YtDlpApp:
                     self._append_log(message[1])
                 elif kind == "done":
                     self._handle_done(message[1], message[2])
+                elif kind == "update_done":
+                    self._handle_update_done(message[1], message[2], message[3])
                 elif kind == "error":
+                    operation = message[1]
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
+                    self.progress_var.set(0)
                     self._set_running(False)
+                    self.active_operation = None
                     self.status_var.set("Errore")
                     self.detail_var.set("")
-                    self._append_log(message[1])
-                    messagebox.showerror(APP_NAME, f"Impossibile avviare il download:\n{message[1]}")
+                    self._append_log(message[2])
+                    activity = "l'aggiornamento" if operation == "update" else "il download"
+                    messagebox.showerror(APP_NAME, f"Impossibile completare {activity}:\n{message[2]}")
         except queue.Empty:
             pass
         self.root.after(100, self._drain_messages)
 
     def _handle_done(self, return_code: int, was_cancelled: bool) -> None:
         self._set_running(False)
+        self.active_operation = None
         if was_cancelled:
             self.status_var.set("Download annullato")
             self.detail_var.set("")
@@ -597,6 +680,43 @@ class YtDlpApp:
                 "Il download non è riuscito. Controlla i dettagli nella finestra.",
             )
 
+    def _handle_update_done(
+        self,
+        return_code: int,
+        previous_version: str,
+        updated_version: str,
+    ) -> None:
+        self.progress.stop()
+        self.progress.configure(mode="determinate")
+        self._set_running(False)
+        self.active_operation = None
+
+        if return_code != 0:
+            self.progress_var.set(0)
+            self.status_var.set("Aggiornamento non riuscito")
+            self.detail_var.set(f"Codice errore {return_code}")
+            messagebox.showerror(
+                APP_NAME,
+                "Non è stato possibile aggiornare yt-dlp. Controlla i dettagli nella finestra.",
+            )
+            return
+
+        self.progress_var.set(100)
+        if updated_version == previous_version:
+            self.status_var.set("yt-dlp è già aggiornato")
+            self.detail_var.set(f"Versione {updated_version}")
+            self._append_log(f"Nessun aggiornamento necessario: yt-dlp {updated_version}.")
+            messagebox.showinfo(APP_NAME, f"yt-dlp è già aggiornato alla versione {updated_version}.")
+        else:
+            self.status_var.set("Aggiornamento completato")
+            self.detail_var.set(f"Versione {updated_version}")
+            self._append_log(f"Aggiornamento verificato: {previous_version} → {updated_version}.")
+            self.root.bell()
+            messagebox.showinfo(
+                APP_NAME,
+                f"yt-dlp è stato aggiornato dalla versione {previous_version} alla {updated_version}.",
+            )
+
     @staticmethod
     def _snapshot_destination(folder: Path) -> dict[str, tuple[int, int]]:
         snapshot: dict[str, tuple[int, int]] = {}
@@ -633,7 +753,7 @@ class YtDlpApp:
 
     def cancel_download(self) -> None:
         process = self.process
-        if not process or process.poll() is not None:
+        if self.active_operation != "download" or not process or process.poll() is not None:
             return
         self.cancel_requested = True
         self.status_var.set("Annullamento...")
@@ -653,9 +773,17 @@ class YtDlpApp:
 
     def _on_close(self) -> None:
         if self.process and self.process.poll() is None:
-            if not messagebox.askyesno(APP_NAME, "È in corso un download. Annullarlo e chiudere?"):
+            activity = "un aggiornamento" if self.active_operation == "update" else "un download"
+            if not messagebox.askyesno(APP_NAME, f"È in corso {activity}. Interromperlo e chiudere?"):
                 return
-            self.cancel_download()
+            process = self.process
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                check=False,
+            )
         self.root.destroy()
 
 
