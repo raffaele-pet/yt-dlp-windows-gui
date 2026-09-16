@@ -4,9 +4,7 @@ import os
 import locale
 import queue
 import re
-import shutil
 import subprocess
-import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -18,6 +16,9 @@ APP_NAME = "YT-DLP"
 APP_DIR = Path(__file__).resolve().parent
 ICON_PNG = APP_DIR / "assets" / "yt-dlp-icon.png"
 ICON_ICO = APP_DIR / "assets" / "yt-dlp-icon.ico"
+VENV_PYTHON = APP_DIR / ".venv" / "Scripts" / "python.exe"
+VENV_YTDLP = APP_DIR / ".venv" / "Scripts" / "yt-dlp.exe"
+REQUIREMENTS = APP_DIR / "requirements.txt"
 
 COLOR_BACKGROUND = "#0D1117"
 COLOR_SURFACE = "#161B22"
@@ -42,29 +43,16 @@ FORMAT_OPTIONS: dict[str, list[str]] = {
 
 
 def locate_yt_dlp() -> str | None:
-    """Find the real yt-dlp CLI, never the packaged GUI itself."""
-    candidates: list[str | None] = []
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        candidates.append(str(Path(local_app_data) / "Microsoft" / "WinGet" / "Links" / "yt-dlp.exe"))
-    candidates.append(shutil.which("yt-dlp"))
+    """Find yt-dlp only inside this project's isolated environment."""
+    return str(VENV_YTDLP.resolve()) if VENV_YTDLP.is_file() else None
 
-    packaged_gui = Path(sys.executable).resolve() if getattr(sys, "frozen", False) else None
 
-    for candidate in candidates:
-        if not candidate:
-            continue
-        candidate_path = Path(candidate)
-        if not candidate_path.is_file():
-            continue
-        try:
-            resolved_candidate = candidate_path.resolve()
-        except OSError:
-            continue
-        if packaged_gui and os.path.normcase(str(resolved_candidate)) == os.path.normcase(str(packaged_gui)):
-            continue
-        return str(resolved_candidate)
-    return None
+def build_update_command() -> list[str]:
+    """Update only the yt-dlp package installed in this project's .venv."""
+    return [
+        str(VENV_PYTHON), "-m", "pip", "install", "--disable-pip-version-check",
+        "--upgrade", "-r", str(REQUIREMENTS),
+    ]
 
 
 def probe_yt_dlp(executable: str) -> str:
@@ -583,7 +571,7 @@ class YtDlpApp:
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         try:
             self.process = subprocess.Popen(
-                [executable, "-U"],
+                build_update_command(),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

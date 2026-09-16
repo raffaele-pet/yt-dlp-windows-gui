@@ -5,11 +5,12 @@ Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 projectFolder = fso.GetParentFolderName(WScript.ScriptFullName)
-pythonw = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python312\pythonw.exe"
+pythonw = projectFolder & "\.venv\Scripts\pythonw.exe"
 appFile = projectFolder & "\app.py"
 
 If Not fso.FileExists(pythonw) Then
-    MsgBox "Python non è stato trovato in:" & vbCrLf & pythonw, 16, "YT-DLP"
+    MsgBox "YT-DLP non è ancora installato." & vbCrLf & _
+           "Esegui prima INSTALL.bat per creare l'ambiente locale .venv.", 16, "YT-DLP"
     WScript.Quit 1
 End If
 

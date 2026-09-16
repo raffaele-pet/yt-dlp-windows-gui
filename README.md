@@ -19,12 +19,12 @@ Interfaccia grafica non ufficiale per [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 
 - Windows 10 o Windows 11;
 - connessione Internet;
+- Python 3.11 o successivo già installato; se manca, l'installer propone Python 3.13;
 - [WinGet](https://learn.microsoft.com/windows/package-manager/winget/), normalmente incluso nelle versioni moderne di Windows tramite **App Installer**.
 
 Gli altri componenti possono essere installati automaticamente:
 
-- Python 3.12;
-- yt-dlp;
+- yt-dlp, isolato nella cartella locale `.venv`;
 - FFmpeg;
 - Deno.
 
@@ -35,7 +35,7 @@ Gli altri componenti possono essere installati automaticamente:
 3. Fai doppio clic su `INSTALL.bat`.
 4. Segui l'avanzamento mostrato nel terminale.
 
-L'installer controlla i componenti esistenti, installa quelli mancanti e cerca gli aggiornamenti disponibili. yt-dlp viene confrontato con `stable@latest` della [repository ufficiale](https://github.com/yt-dlp/yt-dlp) e, se necessario, aggiornato durante l'installazione; Python, FFmpeg e Deno vengono aggiornati tramite WinGet. Se Python è utilizzato da un altro programma, il suo aggiornamento viene rimandato in sicurezza e l'installer indica come completarlo in seguito. Al termine, configura il `PATH`, verifica le versioni e crea un collegamento **YT-DLP** sul Desktop con l'[icona richiesta](https://img.icons8.com/?size=100&id=cLcs1xqp7qTl&format=png&color=000000).
+L'installer riutilizza qualsiasi Python di sistema compatibile senza installarne o aggiornarne un secondo. Crea quindi `.venv` dentro il progetto e vi installa il pacchetto stabile ufficiale di yt-dlp; a ogni nuova esecuzione controlla e applica gli aggiornamenti soltanto in questo ambiente isolato. FFmpeg e Deno restano gestiti tramite WinGet. Al termine verifica le versioni e crea un collegamento **YT-DLP** sul Desktop con l'[icona richiesta](https://img.icons8.com/?size=100&id=cLcs1xqp7qTl&format=png&color=000000).
 
 Per eseguire soltanto un controllo, senza installare o modificare nulla:
 
@@ -49,7 +49,7 @@ Fai doppio clic su `RUN.vbs` per aprire l'interfaccia senza mostrare il terminal
 
 Se l'applicazione non parte, utilizza `RUN_DEBUG.cmd` per visualizzare eventuali errori.
 
-Il pulsante **Aggiorna yt-dlp** controlla la release stabile ufficiale, mostra i dettagli dell'operazione nella finestra e installa l'aggiornamento quando necessario.
+Il pulsante **Aggiorna yt-dlp** aggiorna esclusivamente la copia contenuta nella `.venv`, mostra i dettagli dell'operazione nella finestra e non modifica Python o pacchetti globali.
 
 ## Struttura del progetto
 
@@ -58,6 +58,7 @@ app.py          Interfaccia grafica e gestione dei download
 INSTALL.bat     Installazione e verifica dei requisiti
 RUN.vbs         Avvio normale senza terminale
 RUN_DEBUG.cmd   Avvio diagnostico con terminale
+requirements.txt Pacchetti installati nella .venv locale
 assets/         Icona della finestra e del collegamento Desktop
 ```
 
