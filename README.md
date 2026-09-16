@@ -35,7 +35,7 @@ Gli altri componenti possono essere installati automaticamente:
 3. Fai doppio clic su `INSTALL.bat`.
 4. Segui l'avanzamento mostrato nel terminale.
 
-L'installer controlla i componenti esistenti, installa quelli mancanti e cerca gli aggiornamenti disponibili. yt-dlp viene confrontato con la release stabile ufficiale; Python, FFmpeg e Deno vengono aggiornati tramite WinGet. Se Python è utilizzato da un altro programma, il suo aggiornamento viene rimandato in sicurezza e l'installer indica come completarlo in seguito. Al termine, configura il `PATH`, verifica le versioni e crea un collegamento **YT-DLP** sul Desktop.
+L'installer controlla i componenti esistenti, installa quelli mancanti e cerca gli aggiornamenti disponibili. yt-dlp viene confrontato con `stable@latest` della [repository ufficiale](https://github.com/yt-dlp/yt-dlp) e, se necessario, aggiornato durante l'installazione; Python, FFmpeg e Deno vengono aggiornati tramite WinGet. Se Python è utilizzato da un altro programma, il suo aggiornamento viene rimandato in sicurezza e l'installer indica come completarlo in seguito. Al termine, configura il `PATH`, verifica le versioni e crea un collegamento **YT-DLP** sul Desktop con l'[icona richiesta](https://img.icons8.com/?size=100&id=cLcs1xqp7qTl&format=png&color=000000).
 
 Per eseguire soltanto un controllo, senza installare o modificare nulla:
 
@@ -58,6 +58,7 @@ app.py          Interfaccia grafica e gestione dei download
 INSTALL.bat     Installazione e verifica dei requisiti
 RUN.vbs         Avvio normale senza terminale
 RUN_DEBUG.cmd   Avvio diagnostico con terminale
+assets/         Icona della finestra e del collegamento Desktop
 ```
 
 ## Aggiornamenti

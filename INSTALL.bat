@@ -34,6 +34,14 @@ if not exist "%PROJECT_DIR%RUN.vbs" (
     call :fatal "Manca il file RUN.vbs nella cartella del progetto."
     exit /b 1
 )
+if not exist "%PROJECT_DIR%assets\yt-dlp-icon.png" (
+    call :fatal "Manca l'icona PNG dell'applicazione."
+    exit /b 1
+)
+if not exist "%PROJECT_DIR%assets\yt-dlp-icon.ico" (
+    call :fatal "Manca l'icona Windows dell'applicazione."
+    exit /b 1
+)
 
 echo [1/6] Controllo dei requisiti...
 call :check_all
@@ -149,7 +157,7 @@ echo.
 echo [6/6] Creazione del collegamento sul Desktop...
 set "YT_DLP_PROJECT=%PROJECT_DIR_NO_SLASH%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop 'YT-DLP.lnk')); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Avvia l''interfaccia YT-DLP'; $shortcut.IconLocation=(Join-Path $env:WINDIR 'System32\shell32.dll')+',14'; $shortcut.Save()"
+    "$project=$env:YT_DLP_PROJECT; $desktop=[Environment]::GetFolderPath('Desktop'); $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop 'YT-DLP.lnk')); $shortcut.TargetPath=(Join-Path $env:WINDIR 'System32\wscript.exe'); $shortcut.Arguments=([char]34)+(Join-Path $project 'RUN.vbs')+([char]34); $shortcut.WorkingDirectory=$project; $shortcut.Description='Avvia l''interfaccia YT-DLP'; $shortcut.IconLocation=(Join-Path $project 'assets\yt-dlp-icon.ico')+',0'; $shortcut.Save()"
 if errorlevel 1 (
     call :fatal "Impossibile creare il collegamento sul Desktop."
     exit /b 1
@@ -292,11 +300,15 @@ exit /b 1
 :update_ytdlp
 set "YTDLP_COMMAND=%YTDLP_EXE%"
 if not exist "!YTDLP_COMMAND!" set "YTDLP_COMMAND=yt-dlp"
+set "YTDLP_BEFORE=non disponibile"
+for /f "delims=" %%V in ('"!YTDLP_COMMAND!" --version 2^>nul') do set "YTDLP_BEFORE=%%V"
 echo.
 echo ----------------------------------------------------------------
 echo [AGGIORNA] yt-dlp dalla release stabile ufficiale
 echo ----------------------------------------------------------------
-"!YTDLP_COMMAND!" -U
+echo Versione installata: !YTDLP_BEFORE!
+echo Controllo il canale stable della repo ufficiale yt-dlp/yt-dlp...
+"!YTDLP_COMMAND!" --update-to stable@latest
 set "UPDATE_EXIT=!errorlevel!"
 if not "!UPDATE_EXIT!"=="0" (
     echo.
@@ -306,7 +318,13 @@ if not "!UPDATE_EXIT!"=="0" (
     pause >nul
     exit /b 1
 )
-echo [OK] Controllo aggiornamenti di yt-dlp completato.
+set "YTDLP_AFTER=non disponibile"
+for /f "delims=" %%V in ('"!YTDLP_COMMAND!" --version 2^>nul') do set "YTDLP_AFTER=%%V"
+if "!YTDLP_BEFORE!"=="!YTDLP_AFTER!" (
+    echo [OK] yt-dlp !YTDLP_AFTER! e gia aggiornato.
+) else (
+    echo [AGGIORNATO] yt-dlp !YTDLP_BEFORE! --^> !YTDLP_AFTER!
+)
 exit /b 0
 
 

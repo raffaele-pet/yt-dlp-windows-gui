@@ -15,6 +15,9 @@ from urllib.parse import urlparse
 
 
 APP_NAME = "YT-DLP"
+APP_DIR = Path(__file__).resolve().parent
+ICON_PNG = APP_DIR / "assets" / "yt-dlp-icon.png"
+ICON_ICO = APP_DIR / "assets" / "yt-dlp-icon.ico"
 
 COLOR_BACKGROUND = "#0D1117"
 COLOR_SURFACE = "#161B22"
@@ -120,6 +123,14 @@ class YtDlpApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(APP_NAME)
+        self.app_icon: tk.PhotoImage | None = None
+        try:
+            self.app_icon = tk.PhotoImage(file=str(ICON_PNG))
+            self.root.iconphoto(True, self.app_icon)
+            if ICON_ICO.is_file():
+                self.root.iconbitmap(default=str(ICON_ICO))
+        except tk.TclError:
+            self.app_icon = None
         self.root.geometry("780x650")
         self.root.minsize(680, 570)
         self.root.configure(background=COLOR_BACKGROUND)
