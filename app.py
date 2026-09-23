@@ -32,11 +32,11 @@ COLOR_MUTED = "#C9D1D9"
 FORMAT_OPTIONS: dict[str, list[str]] = {
     "Video MP4 (consigliato)": [
         "-f",
-        "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+        "bv*[vcodec^=avc1][ext=mp4]+ba[ext=m4a]/b[vcodec^=avc1][ext=mp4]",
         "--merge-output-format",
         "mp4",
     ],
-    "Video - qualità massima": ["-f", "bv*+ba/b"],
+    "Video - qualità massima": ["-f", "bv*[vcodec^=avc1]+ba/b[vcodec^=avc1]"],
     "Solo audio MP3": ["-x", "--audio-format", "mp3", "--audio-quality", "0"],
     "Solo audio M4A": ["-x", "--audio-format", "m4a", "--audio-quality", "0"],
 }
