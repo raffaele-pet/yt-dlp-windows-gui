@@ -6,6 +6,7 @@ Interfaccia grafica non ufficiale per [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 
 - download video in MP4;
 - download alla massima qualità disponibile;
+- rilevamento automatico delle risoluzioni disponibili e scelta della qualità video;
 - estrazione audio in MP3 o M4A;
 - supporto alle playlist;
 - scelta della cartella di destinazione;
@@ -50,6 +51,18 @@ Fai doppio clic su `RUN.vbs` per aprire l'interfaccia senza mostrare il terminal
 Se l'applicazione non parte, utilizza `RUN_DEBUG.cmd` per visualizzare eventuali errori.
 
 Il pulsante **Aggiorna yt-dlp** aggiorna esclusivamente la copia contenuta nella `.venv`, mostra i dettagli dell'operazione nella finestra e non modifica Python o pacchetti globali.
+
+Incolla il link con **Ctrl+V**: l'app legge le risoluzioni in background, senza scaricare il video. Dopo la lettura, scegli **Risoluzione** e premi **Scarica**. Il menu elenca le qualità H.264 compatibili con il formato selezionato, mantenendo la compatibilità video del programma; **Massima disponibile** conserva il comportamento automatico. La scelta non si applica ai formati solo audio. Se il sito non permette di rilevare le qualità, resta possibile tentare il download alla qualità massima.
+
+Per le playlist il menu usa le qualità del video nel link, oppure del primo elemento se il link identifica soltanto la playlist. La risoluzione scelta diventa il limite massimo per ciascun elemento, permettendo di scaricare anche i video disponibili soltanto a qualità inferiori. Per un video singolo viene richiesta la risoluzione esatta, senza passare silenziosamente a una qualità diversa.
+
+La barra di scorrimento dei **Dettagli** compare soltanto quando il testo supera lo spazio visibile e segue il tema scuro dell'app.
+
+Per eseguire i test dell'interfaccia e della selezione delle risoluzioni su Windows:
+
+```bat
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
 
 ## Struttura del progetto
 

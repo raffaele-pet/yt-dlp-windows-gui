@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import os
+import json
 import locale
+import os
 import queue
 import re
 import subprocess
@@ -40,6 +41,33 @@ FORMAT_OPTIONS: dict[str, list[str]] = {
     "Solo audio MP3": ["-x", "--audio-format", "mp3", "--audio-quality", "0"],
     "Solo audio M4A": ["-x", "--audio-format", "m4a", "--audio-quality", "0"],
 }
+BEST_RESOLUTION = "Massima disponibile"
+
+
+def available_resolutions(info: dict, format_name: str) -> list[int]:
+    """List only the H.264 video heights accepted by the chosen download format."""
+    heights: set[int] = set()
+    for item in info.get("formats") or []:
+        height = item.get("height")
+        if (
+            not isinstance(height, (int, float)) or height <= 0
+            or not str(item.get("vcodec", "")).startswith("avc1")
+            or item.get("has_drm")
+        ):
+            continue
+        if format_name == "Video MP4 (consigliato)" and item.get("ext") != "mp4":
+            continue
+        heights.add(int(height))
+    return sorted(heights, reverse=True)
+
+
+def build_metadata_command(executable: str, url: str) -> list[str]:
+    return [
+        executable, "--dump-single-json", "--skip-download", "--no-playlist",
+        "--playlist-items", "1", "--no-warnings", "--no-colors",
+        "--encoding", "utf-8", "--socket-timeout", "15", "--retries", "1",
+        "--", url,
+    ]
 
 
 def locate_yt_dlp() -> str | None:
@@ -85,6 +113,7 @@ def build_command(
     destination: str,
     format_name: str,
     download_playlist: bool,
+    resolution: int | None = None,
 ) -> list[str]:
     command = [
         executable,
@@ -102,8 +131,16 @@ def build_command(
     ]
     if not download_playlist:
         command.append("--no-playlist")
-    command.extend(FORMAT_OPTIONS[format_name])
-    command.append(url)
+    format_options = FORMAT_OPTIONS[format_name].copy()
+    if resolution is not None and "-f" in format_options:
+        # A playlist can contain videos smaller than the requested quality.
+        height_filter = f"[height{'<=' if download_playlist else '='}{resolution}]"
+        format_options[1] = re.sub(
+            r"\bbv?\*?(?=\[|[+/]|$)",
+            lambda match: match[0] + height_filter, format_options[1],
+        )
+    command.extend(format_options)
+    command.extend(["--", url])
     return command
 
 
@@ -119,8 +156,8 @@ class YtDlpApp:
                 self.root.iconbitmap(default=str(ICON_ICO))
         except tk.TclError:
             self.app_icon = None
-        self.root.geometry("780x650")
-        self.root.minsize(680, 570)
+        self.root.geometry("780x720")
+        self.root.minsize(680, 660)
         self.root.configure(background=COLOR_BACKGROUND)
 
         self.messages: queue.Queue[tuple] = queue.Queue()
@@ -130,11 +167,19 @@ class YtDlpApp:
         self.downloaded_files: list[str] = []
         self.active_destination: Path | None = None
         self.destination_snapshot: dict[str, tuple[int, int]] = {}
+        self.metadata_after: str | None = None
+        self.metadata_revision = 0
+        self.metadata_loading = False
+        self.metadata_url: str | None = None
+        self.metadata_info: dict = {}
+        self.metadata_error = False
 
         self.url_var = tk.StringVar()
         default_downloads = Path.home() / "Downloads"
         self.destination_var = tk.StringVar(value=str(default_downloads))
         self.format_var = tk.StringVar(value="Video MP4 (consigliato)")
+        self.resolution_var = tk.StringVar(value=BEST_RESOLUTION)
+        self.resolution_hint = tk.StringVar(value="Incolla un link per leggere le risoluzioni disponibili.")
         self.playlist_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Pronto")
         self.detail_var = tk.StringVar(value="Incolla il link di un video per iniziare.")
@@ -142,6 +187,9 @@ class YtDlpApp:
 
         self._configure_style()
         self._build_ui()
+        self.url_var.trace_add("write", self._url_changed)
+        self.format_var.trace_add("write", lambda *_args: self._refresh_resolutions())
+        self.playlist_var.trace_add("write", lambda *_args: self._refresh_resolutions())
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._drain_messages)
         self.url_entry.focus_set()
@@ -257,11 +305,21 @@ class YtDlpApp:
             darkcolor=COLOR_RED,
         )
         style.configure(
-            "Vertical.TScrollbar",
+            "Details.Vertical.TScrollbar",
             background=COLOR_SURFACE_HOVER,
-            troughcolor=COLOR_BACKGROUND,
+            troughcolor=COLOR_SURFACE,
             bordercolor=COLOR_BORDER,
-            arrowcolor=COLOR_WHITE,
+            lightcolor=COLOR_SURFACE_HOVER,
+            darkcolor=COLOR_SURFACE_HOVER,
+            arrowcolor=COLOR_MUTED,
+            relief="flat",
+            borderwidth=0,
+            arrowsize=12,
+        )
+        style.map(
+            "Details.Vertical.TScrollbar",
+            background=[("pressed", COLOR_RED), ("active", COLOR_BORDER)],
+            arrowcolor=[("pressed", COLOR_WHITE), ("active", COLOR_WHITE)],
         )
 
     def _build_ui(self) -> None:
@@ -289,9 +347,6 @@ class YtDlpApp:
         self.url_entry = ttk.Entry(url_row, textvariable=self.url_var, font=("Segoe UI", 10))
         self.url_entry.grid(row=0, column=0, sticky="ew", ipady=5)
         self.url_entry.bind("<Return>", lambda _event: self.start_download())
-        ttk.Button(url_row, text="Incolla", command=self._paste_url, style="Action.TButton").grid(
-            row=0, column=1, padx=(8, 0)
-        )
 
         ttk.Label(container, text="Salva in", style="Section.TLabel").grid(row=4, column=0, sticky="w")
         folder_row = ttk.Frame(container)
@@ -307,6 +362,7 @@ class YtDlpApp:
         options = ttk.Frame(container)
         options.grid(row=6, column=0, sticky="ew", pady=(0, 16))
         options.columnconfigure(0, weight=1)
+        options.columnconfigure(1, weight=1)
         ttk.Label(options, text="Formato", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.format_box = ttk.Combobox(
             options,
@@ -316,11 +372,22 @@ class YtDlpApp:
             font=("Segoe UI", 10),
         )
         self.format_box.grid(row=1, column=0, sticky="ew", pady=(6, 0), ipady=4)
+        ttk.Label(options, text="Risoluzione", style="Section.TLabel").grid(
+            row=0, column=1, sticky="w", padx=(12, 0)
+        )
+        self.resolution_box = ttk.Combobox(
+            options, textvariable=self.resolution_var, values=[BEST_RESOLUTION],
+            state="disabled", font=("Segoe UI", 10), width=22,
+        )
+        self.resolution_box.grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=(6, 0), ipady=4)
+        ttk.Label(options, textvariable=self.resolution_hint, style="Subtitle.TLabel").grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
         ttk.Checkbutton(
             options,
             text="Scarica l'intera playlist (se il link ne contiene una)",
             variable=self.playlist_var,
-        ).grid(row=2, column=0, sticky="w", pady=(10, 0))
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
         action_row = ttk.Frame(container)
         action_row.grid(row=7, column=0, sticky="ew", pady=(0, 16))
@@ -396,18 +463,95 @@ class YtDlpApp:
             pady=8,
         )
         self.log.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.log.configure(yscrollcommand=scrollbar.set)
+        self.log_scrollbar = ttk.Scrollbar(
+            log_frame, orient="vertical", command=self.log.yview,
+            style="Details.Vertical.TScrollbar",
+        )
+        self.log_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.log_scrollbar.grid_remove()
+        self.log.configure(yscrollcommand=self._update_log_scrollbar)
 
-    def _paste_url(self) -> None:
-        try:
-            value = self.root.clipboard_get().strip()
-        except tk.TclError:
-            messagebox.showinfo(APP_NAME, "Gli appunti non contengono testo.")
+    def _update_log_scrollbar(self, first: str, last: str) -> None:
+        self.log_scrollbar.set(first, last)
+        if float(first) <= 0 and float(last) >= 1:
+            self.log_scrollbar.grid_remove()
+        else:
+            self.log_scrollbar.grid()
+
+    def _url_changed(self, *_args: str) -> None:
+        self.metadata_revision += 1
+        self.metadata_url = None
+        self.metadata_info = {}
+        self.metadata_error = False
+        self.resolution_var.set(BEST_RESOLUTION)
+        if self.metadata_after is not None:
+            self.root.after_cancel(self.metadata_after)
+        self.metadata_after = None
+        self._refresh_resolutions()
+        if is_valid_url(self.url_var.get()):
+            self.metadata_after = self.root.after(700, self._start_metadata)
+
+    def _refresh_resolutions(self) -> None:
+        is_video = "-f" in FORMAT_OPTIONS[self.format_var.get()]
+        heights = available_resolutions(self.metadata_info, self.format_var.get()) if is_video else []
+        choices = [BEST_RESOLUTION] + [f"{height}p" for height in heights]
+        if self.resolution_var.get() not in choices:
+            self.resolution_var.set(BEST_RESOLUTION)
+        self.resolution_box.configure(
+            values=choices,
+            state="readonly" if is_video and heights and not self.active_operation else "disabled",
+        )
+        if not is_video:
+            hint = "La risoluzione non si applica ai download solo audio."
+        elif not is_valid_url(self.url_var.get()):
+            hint = "Incolla un link per leggere le risoluzioni disponibili."
+        elif self.metadata_url != self.url_var.get().strip():
+            hint = "Lettura delle risoluzioni disponibili..."
+        elif self.metadata_error:
+            hint = "Risoluzioni non rilevate; puoi scaricare alla qualità massima."
+        elif not heights:
+            hint = "Nessuna risoluzione H.264 rilevata per questo formato."
+        elif self.playlist_var.get():
+            hint = "Per la playlist la risoluzione scelta è un limite massimo."
+        else:
+            hint = "Risoluzioni H.264 disponibili per il video e il formato scelto."
+        self.resolution_hint.set(hint)
+
+    def _start_metadata(self) -> None:
+        self.metadata_after = None
+        url = self.url_var.get().strip()
+        if self.metadata_loading or not is_valid_url(url):
             return
-        self.url_var.set(value)
-        self.url_entry.icursor(tk.END)
+        executable = locate_yt_dlp()
+        if not executable:
+            self.metadata_url = url
+            self.metadata_error = True
+            self._refresh_resolutions()
+            return
+        self.metadata_loading = True
+        threading.Thread(
+            target=self._metadata_worker,
+            args=(executable, url, self.metadata_revision), daemon=True,
+        ).start()
+
+    def _metadata_worker(self, executable: str, url: str, revision: int) -> None:
+        try:
+            result = subprocess.run(
+                build_metadata_command(executable, url), stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=60, check=False,
+            )
+            if result.returncode:
+                raise RuntimeError(result.stderr.strip() or "Impossibile leggere le risoluzioni.")
+            info = json.loads(result.stdout)
+            if not isinstance(info, dict):
+                raise ValueError("Metadati video non validi.")
+            if info.get("entries") is not None:
+                info = next((entry for entry in info["entries"] if entry), {})
+            self.messages.put(("metadata", revision, url, info, ""))
+        except (OSError, subprocess.SubprocessError, ValueError, RuntimeError) as exc:
+            self.messages.put(("metadata", revision, url, {}, str(exc)))
 
     def _choose_folder(self) -> None:
         selected = filedialog.askdirectory(
@@ -437,9 +581,10 @@ class YtDlpApp:
         self.cancel_button.configure(state="normal" if running and cancellable else "disabled")
         self.url_entry.configure(state="disabled" if running else "normal")
         self.format_box.configure(state="disabled" if running else "readonly")
+        self._refresh_resolutions()
 
     def start_download(self) -> None:
-        if self.process and self.process.poll() is None:
+        if self.active_operation:
             return
 
         url = self.url_var.get().strip()
@@ -452,8 +597,16 @@ class YtDlpApp:
         if not executable:
             messagebox.showerror(
                 APP_NAME,
-                "yt-dlp non è stato trovato. Reinstallalo con winget e riapri l'app.",
+                "yt-dlp non è stato trovato. Avvia INSTALL.bat e riprova.",
             )
+            return
+
+        if "-f" in FORMAT_OPTIONS[self.format_var.get()] and self.metadata_url != url:
+            if self.metadata_after is not None:
+                self.root.after_cancel(self.metadata_after)
+                self.metadata_after = None
+            self._start_metadata()
+            self.resolution_hint.set("Attendi la lettura, poi scegli la risoluzione e premi Scarica.")
             return
         try:
             yt_dlp_version = probe_yt_dlp(executable)
@@ -474,6 +627,7 @@ class YtDlpApp:
             str(destination),
             self.format_var.get(),
             self.playlist_var.get(),
+            None if self.resolution_var.get() == BEST_RESOLUTION else int(self.resolution_var.get()[:-1]),
         )
         self.cancel_requested = False
         self.downloaded_files = []
@@ -487,6 +641,8 @@ class YtDlpApp:
         self.log.configure(state="disabled")
         self._append_log(f"Motore: yt-dlp {yt_dlp_version}")
         self._append_log(f"Destinazione: {destination}")
+        if "-f" in FORMAT_OPTIONS[self.format_var.get()]:
+            self._append_log(f"Risoluzione: {self.resolution_var.get()}")
         self.active_operation = "download"
         self._set_running(True)
 
@@ -532,7 +688,7 @@ class YtDlpApp:
             self.process = None
 
     def start_update(self) -> None:
-        if self.process and self.process.poll() is None:
+        if self.active_operation:
             return
 
         executable = locate_yt_dlp()
@@ -600,7 +756,19 @@ class YtDlpApp:
             while True:
                 message = self.messages.get_nowait()
                 kind = message[0]
-                if kind == "status":
+                if kind == "metadata":
+                    self.metadata_loading = False
+                    if message[1] != self.metadata_revision:
+                        if self.metadata_after is None:
+                            self._start_metadata()
+                        continue
+                    self.metadata_url = message[2]
+                    self.metadata_info = message[3]
+                    self.metadata_error = bool(message[4])
+                    if message[4]:
+                        self._append_log(f"Lettura risoluzioni: {message[4]}")
+                    self._refresh_resolutions()
+                elif kind == "status":
                     self.status_var.set(message[1])
                     self.detail_var.set(message[2])
                 elif kind == "progress":
@@ -620,8 +788,8 @@ class YtDlpApp:
                     self.progress.stop()
                     self.progress.configure(mode="determinate")
                     self.progress_var.set(0)
-                    self._set_running(False)
                     self.active_operation = None
+                    self._set_running(False)
                     self.status_var.set("Errore")
                     self.detail_var.set("")
                     self._append_log(message[2])
@@ -632,8 +800,8 @@ class YtDlpApp:
         self.root.after(100, self._drain_messages)
 
     def _handle_done(self, return_code: int, was_cancelled: bool) -> None:
-        self._set_running(False)
         self.active_operation = None
+        self._set_running(False)
         if was_cancelled:
             self.status_var.set("Download annullato")
             self.detail_var.set("")
@@ -687,8 +855,8 @@ class YtDlpApp:
     ) -> None:
         self.progress.stop()
         self.progress.configure(mode="determinate")
-        self._set_running(False)
         self.active_operation = None
+        self._set_running(False)
 
         if return_code != 0:
             self.progress_var.set(0)
