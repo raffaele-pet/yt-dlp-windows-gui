@@ -16,6 +16,7 @@ FORMATS = [
     {"format_id": "720-60", "height": 720, "vcodec": "avc1.4d", "acodec": "none", "ext": "mp4"},
     {"format_id": "1080", "height": 1080, "vcodec": "avc1.64", "acodec": "none", "ext": "mp4"},
     {"format_id": "audio", "vcodec": "none", "acodec": "aac", "ext": "m4a"},
+    {"format_id": "1440", "height": 1440, "vcodec": "av01.0.12", "acodec": "none", "ext": "mp4"},
     {"format_id": "2160", "height": 2160, "vcodec": "vp9", "acodec": "none", "ext": "webm"},
 ]
 
@@ -26,9 +27,12 @@ class ResolutionTests(unittest.TestCase):
             {"height": 1440, "vcodec": "avc1.64", "ext": "mkv"},
             {"height": 4320, "vcodec": "avc1.64", "ext": "mp4", "has_drm": True},
             {"height": None, "vcodec": "avc1.64", "ext": "mp4"},
+            {"height": 8640, "vcodec": "none", "ext": "mhtml"},
+            {"height": 4320, "vcodec": "images", "ext": "mhtml"},
         ]}
-        self.assertEqual(app.available_resolutions(info, MP4), [1080, 720, 360])
-        self.assertEqual(app.available_resolutions(info, VIDEO), [1440, 1080, 720, 360])
+        self.assertEqual(app.available_resolutions(info, MP4), [2160, 1440, 1080, 720, 360])
+        self.assertEqual(app.available_resolutions(info, VIDEO), [2160, 1440, 1080, 720, 360])
+        self.assertEqual(app.available_resolutions(info, MP3), [])
         self.assertEqual(app.available_resolutions({}, MP4), [])
 
     def test_default_and_audio_arguments_stay_unchanged(self):
@@ -49,7 +53,11 @@ class ResolutionTests(unittest.TestCase):
             item["protocol"] = "https"
         with YoutubeDL({"quiet": True}) as ydl:
             for name in (MP4, VIDEO):
-                for playlist, height, expected in ((False, 720, 720), (False, 360, 360), (True, 900, 720)):
+                for playlist, height, expected in (
+                    (False, 720, 720), (False, 360, 360), (True, 900, 720),
+                    (False, 1440, 1440), (False, 2160, 2160), (True, 2000, 1440),
+                    (False, None, 2160),
+                ):
                     command = app.build_command("yt-dlp", "https://example.com", ".", name, playlist, height)
                     selector = command[command.index("-f") + 1]
                     self.assertIn("+ba", selector)
@@ -59,6 +67,12 @@ class ResolutionTests(unittest.TestCase):
                 command = app.build_command("yt-dlp", "https://example.com", ".", name, False, 480)
                 selected = list(ydl.build_format_selector(command[command.index("-f") + 1])({"formats": formats, "incomplete_formats": False}))
                 self.assertEqual(selected, [])
+
+    def test_mp4_remuxes_other_containers_without_forcing_h264(self):
+        command = app.build_command("yt-dlp", "https://example.com", ".", MP4, False, 2160)
+        self.assertEqual(command[command.index("--merge-output-format") + 1], "mp4")
+        self.assertEqual(command[command.index("--remux-video") + 1], "mp4")
+        self.assertNotIn("vcodec", command[command.index("-f") + 1])
 
 
 class InterfaceTests(unittest.TestCase):
@@ -110,7 +124,7 @@ class InterfaceTests(unittest.TestCase):
         self.gui.url_entry.event_generate("<<Paste>>")
         self.assertEqual(self.gui.url_var.get(), "https://example.com/video")
         self.set_video()
-        self.assertEqual(self.gui.resolution_box.cget("values"), (app.BEST_RESOLUTION, "1080p", "720p", "360p"))
+        self.assertEqual(self.gui.resolution_box.cget("values"), (app.BEST_RESOLUTION, "2160p", "1440p", "1080p", "720p", "360p"))
         self.assertEqual(str(self.gui.resolution_box.cget("state")), "readonly")
 
     def test_audio_busy_and_link_changes_reset_controls(self):

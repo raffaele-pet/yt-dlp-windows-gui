@@ -33,11 +33,13 @@ COLOR_MUTED = "#C9D1D9"
 FORMAT_OPTIONS: dict[str, list[str]] = {
     "Video MP4 (consigliato)": [
         "-f",
-        "bv*[vcodec^=avc1][ext=mp4]+ba[ext=m4a]/b[vcodec^=avc1][ext=mp4]",
+        "bv*+ba[ext=m4a]/bv*+ba/b",
         "--merge-output-format",
         "mp4",
+        "--remux-video",
+        "mp4",
     ],
-    "Video - qualità massima": ["-f", "bv*[vcodec^=avc1]+ba/b[vcodec^=avc1]"],
+    "Video - qualità massima": ["-f", "bv*+ba/b"],
     "Solo audio MP3": ["-x", "--audio-format", "mp3", "--audio-quality", "0"],
     "Solo audio M4A": ["-x", "--audio-format", "m4a", "--audio-quality", "0"],
 }
@@ -45,17 +47,17 @@ BEST_RESOLUTION = "Massima disponibile"
 
 
 def available_resolutions(info: dict, format_name: str) -> list[int]:
-    """List only the H.264 video heights accepted by the chosen download format."""
+    """List video heights across codecs, including VP9 and AV1 above 1080p."""
+    if "-f" not in FORMAT_OPTIONS[format_name]:
+        return []
     heights: set[int] = set()
     for item in info.get("formats") or []:
         height = item.get("height")
         if (
             not isinstance(height, (int, float)) or height <= 0
-            or not str(item.get("vcodec", "")).startswith("avc1")
+            or item.get("vcodec") in {"none", "images"}
             or item.get("has_drm")
         ):
-            continue
-        if format_name == "Video MP4 (consigliato)" and item.get("ext") != "mp4":
             continue
         heights.add(int(height))
     return sorted(heights, reverse=True)
@@ -510,11 +512,11 @@ class YtDlpApp:
         elif self.metadata_error:
             hint = "Risoluzioni non rilevate; puoi scaricare alla qualità massima."
         elif not heights:
-            hint = "Nessuna risoluzione H.264 rilevata per questo formato."
+            hint = "Nessuna risoluzione video rilevata per questo formato."
         elif self.playlist_var.get():
             hint = "Per la playlist la risoluzione scelta è un limite massimo."
         else:
-            hint = "Risoluzioni H.264 disponibili per il video e il formato scelto."
+            hint = "Risoluzioni disponibili per il video e il formato scelto."
         self.resolution_hint.set(hint)
 
     def _start_metadata(self) -> None:

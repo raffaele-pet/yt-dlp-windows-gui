@@ -52,7 +52,9 @@ Se l'applicazione non parte, utilizza `RUN_DEBUG.cmd` per visualizzare eventuali
 
 Il pulsante **Aggiorna yt-dlp** aggiorna esclusivamente la copia contenuta nella `.venv`, mostra i dettagli dell'operazione nella finestra e non modifica Python o pacchetti globali.
 
-Incolla il link con **Ctrl+V**: l'app legge le risoluzioni in background, senza scaricare il video. Dopo la lettura, scegli **Risoluzione** e premi **Scarica**. Il menu elenca le qualità H.264 compatibili con il formato selezionato, mantenendo la compatibilità video del programma; **Massima disponibile** conserva il comportamento automatico. La scelta non si applica ai formati solo audio. Se il sito non permette di rilevare le qualità, resta possibile tentare il download alla qualità massima.
+Incolla il link con **Ctrl+V**: l'app legge le risoluzioni in background, senza scaricare il video. Dopo la lettura, scegli **Risoluzione** e premi **Scarica**. Il menu include tutti i codec video disponibili, compresi VP9 e AV1 usati per risoluzioni come **1440p e 2160p (4K)**; **Massima disponibile** sceglie automaticamente la qualità migliore. La scelta non si applica ai formati solo audio. Se il sito non permette di rilevare le qualità, resta possibile tentare il download alla qualità massima.
+
+Il formato **Video MP4** preferisce l'audio M4A quando disponibile e usa FFmpeg per unire o rimultiplexare le tracce in MP4, conservando il codec e la risoluzione originali senza ricodifica. MP4 indica il contenitore: un video VP9 o AV1 richiede un lettore compatibile con quel codec.
 
 Per le playlist il menu usa le qualità del video nel link, oppure del primo elemento se il link identifica soltanto la playlist. La risoluzione scelta diventa il limite massimo per ciascun elemento, permettendo di scaricare anche i video disponibili soltanto a qualità inferiori. Per un video singolo viene richiesta la risoluzione esatta, senza passare silenziosamente a una qualità diversa.
 
