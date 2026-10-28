@@ -7,6 +7,7 @@ Interfaccia grafica non ufficiale per [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - download video in MP4;
 - download alla massima qualità disponibile;
 - rilevamento automatico delle risoluzioni disponibili e scelta della qualità video;
+- supporto al player VidXgo, anche quando incorporato nella pagina di un altro sito;
 - estrazione audio in MP3 o M4A;
 - supporto alle playlist;
 - scelta della cartella di destinazione;
@@ -60,6 +61,14 @@ Per le playlist il menu usa le qualità del video nel link, oppure del primo ele
 
 La barra di scorrimento dei **Dettagli** compare soltanto quando il testo supera lo spazio visibile e segue il tema scuro dell'app.
 
+### Player VidXgo
+
+Puoi incollare un link diretto a `v.vidxgo.co` oppure una pagina che contiene il suo iframe, come un link episodio di Streaming-Community. Il plugin incluso nel progetto individua il player, legge la sorgente HLS e mostra le risoluzioni nella stessa interfaccia degli altri siti. Per le serie conserva stagione ed episodio nell'identificativo del file. Il link episodio identifica un singolo episodio: la casella playlist non aggiunge gli altri episodi della serie.
+
+L'integrazione usa il trasporto browser di yt-dlp (`curl-cffi`) e conserva gli header e i parametri temporanei richiesti dai flussi HLS. Queste dipendenze vengono installate da `INSTALL.bat` oppure dal pulsante **Aggiorna yt-dlp**. Il plugin resta nella cartella `plugins/` e viene caricato esplicitamente sia per leggere le qualità sia per scaricare.
+
+Il sito può comunque rifiutare l'accesso con HTTP 403/429 o essere in manutenzione. In questi casi i dettagli mostrano la causa; l'integrazione non garantisce l'accesso a un player bloccato. Durante la verifica del 28 ottobre 2026 il link segnalato ha consentito di riconoscere il player, ma il server VidXgo ha rifiutato l'accesso con HTTP 403. Il download HLS completo, la selezione della risoluzione e la gestione dei parametri temporanei sono verificati con un server locale di test.
+
 Per eseguire i test dell'interfaccia e della selezione delle risoluzioni su Windows:
 
 ```bat
@@ -75,6 +84,8 @@ RUN.vbs         Avvio normale senza terminale
 RUN_DEBUG.cmd   Avvio diagnostico con terminale
 requirements.txt Pacchetti installati nella .venv locale
 assets/         Icona della finestra e del collegamento Desktop
+plugins/        Estrattore VidXgo caricato dall'applicazione
+tests/          Test dell'interfaccia, delle risoluzioni e del player HLS
 ```
 
 ## Aggiornamenti

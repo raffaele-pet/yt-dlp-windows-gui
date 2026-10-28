@@ -20,6 +20,7 @@ ICON_ICO = APP_DIR / "assets" / "yt-dlp-icon.ico"
 VENV_PYTHON = APP_DIR / ".venv" / "Scripts" / "python.exe"
 VENV_YTDLP = APP_DIR / ".venv" / "Scripts" / "yt-dlp.exe"
 REQUIREMENTS = APP_DIR / "requirements.txt"
+PLUGIN_DIR = APP_DIR / "plugins"
 
 COLOR_BACKGROUND = "#0D1117"
 COLOR_SURFACE = "#161B22"
@@ -65,7 +66,8 @@ def available_resolutions(info: dict, format_name: str) -> list[int]:
 
 def build_metadata_command(executable: str, url: str) -> list[str]:
     return [
-        executable, "--dump-single-json", "--skip-download", "--no-playlist",
+        executable, "--plugin-dirs", str(PLUGIN_DIR),
+        "--dump-single-json", "--skip-download", "--no-playlist",
         "--playlist-items", "1", "--no-warnings", "--no-colors",
         "--encoding", "utf-8", "--socket-timeout", "15", "--retries", "1",
         "--", url,
@@ -119,6 +121,8 @@ def build_command(
 ) -> list[str]:
     command = [
         executable,
+        "--plugin-dirs",
+        str(PLUGIN_DIR),
         "--newline",
         "--no-colors",
         "--windows-filenames",
